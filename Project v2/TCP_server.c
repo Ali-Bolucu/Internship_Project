@@ -88,6 +88,14 @@ void func()
 			tx_freq(freq);
 			}
 			
+		else if (strncmp("sinF:", buff, 4) == 0) {
+
+			float freq;
+			sscanf(buff, "%*[^0123456789]%lf", &freq);
+			write(connfd, mes3, 512);		
+			sin_gen(freq);
+			}
+			
 		else if (strncmp("close", buff, 5) == 0) {
 
 			client_conn();

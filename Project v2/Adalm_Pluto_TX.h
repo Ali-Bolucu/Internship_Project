@@ -326,10 +326,8 @@ int pluto()
 	{
 		char* p_dat, * p_end;
 		ptrdiff_t p_inc;
-
 		// Refill RX buffer: fetch from hardware
 		iio_buffer_refill(rxbuf);
-
 		p_inc = iio_buffer_step(rxbuf);
 		p_end = iio_buffer_end(rxbuf);
 		int iter = 0;
