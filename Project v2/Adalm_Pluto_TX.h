@@ -15,6 +15,8 @@
 
 #pragma warning (disable : 4996)
 
+void sin_gen(float freq_sin, int sample_rate);
+
 
 /* RX is input, TX is output */
 enum iodev { RX, TX };
@@ -44,49 +46,9 @@ static struct iio_channel* chad = NULL;
 static bool stop;
 
 
-//Functions for frequency change
-
-int tx_freq(double freq) {
-/**
-* TX : altvoltage1
-* RX : altvoltage0
-**/
-	printf("gelen sayı: %lf", freq);
-
-	dev = iio_context_find_device(ctx, "ad9361-phy");
-
-	iio_channel_attr_write_longlong(
-		iio_device_find_channel(dev, "altvoltage1", true),
-		"frequency",
-		freq);
-
-	return 0;
-}
 
 
-
-/* signal generator: make a sine wave */
-
-/* cleanup and exit */
-int shutdown_pluto()
-{
-	printf("* Destroying buffers\n");
-	if (rxbuf) { iio_buffer_destroy(rxbuf); }
-	if (txbuf) { iio_buffer_destroy(txbuf); }
-
-	printf("* Disabling streaming channels\n");
-	if (rx0_i) { iio_channel_disable(rx0_i); }
-	if (rx0_q) { iio_channel_disable(rx0_q); }
-	if (tx0_i) { iio_channel_disable(tx0_i); }
-	if (tx0_q) { iio_channel_disable(tx0_q); }
-
-	printf("* Destroying context\n");
-	if (ctx) { iio_context_destroy(ctx); }
-	return 0;
-}
-
-static void handle_sig(int sig)
-{
+static void handle_sig(int sig) {
 	printf("Waiting for process to finish...\n");
 	stop = true;
 }
@@ -182,8 +144,98 @@ bool cfg_ad9361_streaming_ch(struct iio_context* ctx, struct stream_cfg* cfg, en
 }
 
 
+////Functions for frequency change
+
+// For TX
+void tx_freq(double freq) {
+	/**
+	* TX : altvoltage1
+	* RX : altvoltage0
+	**/
+	printf("Freq is changing to: %lf", freq);
+
+	dev = iio_context_find_device(ctx, "ad9361-phy");
+
+	iio_channel_attr_write_longlong(
+		iio_device_find_channel(dev, "altvoltage1", true),
+		"frequency",
+		freq);
+}
+
+// For RX
+void rx_freq(double freq) {
+	/**
+	* TX : altvoltage1
+	* RX : altvoltage0
+	**/
+	printf("Freq is changing to: %lf", freq);
+
+	dev = iio_context_find_device(ctx, "ad9361-phy");
+
+	iio_channel_attr_write_longlong(
+		iio_device_find_channel(dev, "altvoltage0", true),
+		"frequency",
+		freq);
+}
+
+void sin_freq(float freq_sin) {
+
+	int sample_rate = 3072000;
+
+	sin_gen(freq_sin, sample_rate);
+}
+
+
+
+/* signal generator: make a sine wave */
+void sin_gen(float freq_sin, int sample_rate) {
+
+	float sin_i[24800];
+	float cos_q[24800];
+
+	for (int i = 0; i < 24800; i++) {
+		sin_i[i] = 0.9 * sin(((float)i * M_PI * 2 * freq_sin) / (float)(sample_rate));
+		cos_q[i] = 0.9 * cos(((float)i * M_PI * 2 * freq_sin) / (float)(sample_rate));
+
+	}
+
+
+	char* p_dat, * p_end;
+	ptrdiff_t p_inc;
+
+	p_inc = iio_buffer_step(txbuf);
+	p_end = iio_buffer_end(txbuf);
+	int iter = 0;
+	for (p_dat = iio_buffer_first(txbuf, tx0_q); p_dat < p_end; p_dat += p_inc) {
+		((int16_t*)p_dat)[0] = cos_q[iter] * 16384;
+		((int16_t*)p_dat)[1] = sin_i[iter++] * 16384;
+
+	}
+
+	iio_buffer_push(txbuf);
+}
+
+/* cleanup and exit */
+int shutdown_pluto()
+{
+	printf("* Destroying buffers\n");
+	if (rxbuf) { iio_buffer_destroy(rxbuf); }
+	if (txbuf) { iio_buffer_destroy(txbuf); }
+
+	printf("* Disabling streaming channels\n");
+	if (rx0_i) { iio_channel_disable(rx0_i); }
+	if (rx0_q) { iio_channel_disable(rx0_q); }
+	if (tx0_i) { iio_channel_disable(tx0_i); }
+	if (tx0_q) { iio_channel_disable(tx0_q); }
+
+	printf("* Destroying context\n");
+	if (ctx) { iio_context_destroy(ctx); }
+	return 0;
+}
+
+
 /* simple configuration and streaming */
-bool pluto()
+int pluto()
 {
 	bool check;
 
@@ -207,16 +259,16 @@ bool pluto()
 
 	printf("* Acquiring IIO context\n");
 	check = (ctx = iio_create_context_from_uri("ip:192.168.2.1"));
-		if(check == false){
-			printf("No context");
-			return false;
-		}
+	if (check == false) {
+		printf("No context");
+		return false;
+	}
 
 	check = (iio_context_get_devices_count(ctx) > 0);
-		if (check == false) {
-			printf("No devices");
-			return false;
-		}
+	if (check == false) {
+		printf("No devices");
+		return false;
+	}
 
 	printf("* Acquiring AD9361 streaming devices\n");
 	check = (get_ad9361_stream_dev(ctx, TX, &tx));
@@ -261,46 +313,31 @@ bool pluto()
 
 
 	int sample_rate = 3072000;
-	float sin_i[24800];
-	float cos_q[24800];
+	float freq_sin = 10000;
 
-	for (int i = 0; i < 24800; i++) {
-		sin_i[i] = 0.9 * sin(((float)i * M_PI * 2 * 10000) / (float)(sample_rate));
-		cos_q[i] = 0.9 * cos(((float)i * M_PI * 2 * 10000) / (float)(sample_rate));
 
+	//sin wave created
+	sin_gen(freq_sin, sample_rate);
+
+
+	/*
+	printf("* Starting IO streaming (press CTRL+C to cancel)\n");
+	while (!stop)
+	{
+		char* p_dat, * p_end;
+		ptrdiff_t p_inc;
+
+		// Refill RX buffer: fetch from hardware
+		iio_buffer_refill(rxbuf);
+
+		p_inc = iio_buffer_step(rxbuf);
+		p_end = iio_buffer_end(rxbuf);
+		int iter = 0;
+		for (p_dat = iio_buffer_first(rxbuf, rx0_q); p_dat < p_end; p_dat += p_inc) {
+	
+		}
 	}
-
-
-	int iter = 0;
-	int32_t QPSKsamplesTX[24800][2];
-	for (iter = 0; iter < 24800; iter++) {
-
-		QPSKsamplesTX[iter][0] = cos_q[iter] * 16384; // multiplied with 2^14
-		QPSKsamplesTX[iter][1] = sin_i[iter] * 16384;
-
-	}
-
-	char* p_dat, * p_end;
-	ptrdiff_t p_inc;
-
-	p_inc = iio_buffer_step(txbuf);
-	p_end = iio_buffer_end(txbuf);
-	iter = 0;
-	for (p_dat = iio_buffer_first(txbuf, tx0_q); p_dat < p_end; p_dat += p_inc) {
-		((int16_t*)p_dat)[0] = QPSKsamplesTX[iter][0];
-		((int16_t*)p_dat)[1] = QPSKsamplesTX[iter++][1];
-
-	}
-
-	iio_buffer_push(txbuf);
-
-	aa = iio_context_find_device(ctx, "cf-ad9361-dds-core-lpc");
-
-	chad = iio_device_find_channel(aa, "voltage0", true);
-	iio_channel_attr_write_double(chad, "hardwaregain", -3.00);
-	chad = iio_device_find_channel(aa, "voltage1", true);
-	iio_channel_attr_write_double(chad, "hardwaregain", -3.00);
-
-
-	return true;
+	*/
+	//shutdown_pluto();
+	return 0;
 }
