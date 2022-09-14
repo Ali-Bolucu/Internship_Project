@@ -22,6 +22,8 @@
 int sockfd, connfd, len;
 struct sockaddr_in servaddr, cli;
 
+bool check = false;
+
 
 
 void client_conn(){
@@ -54,19 +56,21 @@ void func()
 	char buff[MAX] = "not empty";
 	
 	char mes1[MAX] = "Shutting down";
-	char mes2[MAX] = "It's working";
+	char mes2[MAX] = "OK";
 	char mes3[MAX] = "Frequency changed";
 	char mes4[MAX] = "NO MEANING";
-
+	char mes5[MAX] = "NOT OK";
+	char mes6[MAX] = "Freq Added";
+	
 	while(true){
 	
 	//retval = getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &error, &len);
 	
 	if ((strcmp(buff, ""))) {
 		
-		bzero(buff, MAX);
-		read(connfd, buff, sizeof(buff));
-		printf("[client] %s \n", buff);
+			bzero(buff, MAX);
+			read(connfd, buff, sizeof(buff));
+			printf("[client] %s \n", buff);
 		
 		if (strncmp("exit", buff, 4) == 0) {
 			printf("Server Exit...\n");
@@ -77,7 +81,13 @@ void func()
 		
 		else if (strncmp("CHECK", buff, 4) == 0) {
 			printf("Checking...\n");
+			
+			if (check)
 			write(connfd, mes2, 512);
+			
+			else
+			write(connfd, mes5, 512);
+			
 			}
 		
 		else if (strncmp("F:", buff, 2) == 0) {
@@ -91,9 +101,16 @@ void func()
 		else if (strncmp("sinF:", buff, 4) == 0) {
 
 			float freq;
-			sscanf(buff, "%*[^0123456789]%lf", &freq);
+			sscanf(buff, "%*[^0123456789]%f", &freq);
 			write(connfd, mes3, 512);		
-			sin_gen(freq);
+			sin_freq(freq);
+			}
+		else if (strncmp("Multi:", buff, 4) == 0) {
+
+			float freq;
+			sscanf(buff, "%*[^0123456789]%f", &freq);
+			write(connfd, mes6, 512);		
+			Multi(freq);
 			}
 			
 		else if (strncmp("close", buff, 5) == 0) {
@@ -113,6 +130,8 @@ void func()
 	strcpy(buff, mes3);
 	}
 }
+}
+
 			
 
 
@@ -153,11 +172,12 @@ int main()
 		printf("Server listening..\n");
 	len = sizeof(cli);
 
+	
+	// Starting Pluto
+	check = pluto();
+	
 	// Accept the data packet from client and verification
 	client_conn();
-
-	// Starting Pluto
-	pluto();
 
 
 	// Function for chatting between client and server
@@ -165,4 +185,5 @@ int main()
 
 	// After chatting close the socket
 	close(sockfd);
-}
+	}
+

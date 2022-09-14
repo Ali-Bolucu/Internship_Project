@@ -16,6 +16,11 @@
 #pragma warning (disable : 4996)
 
 void sin_gen(float freq_sin, int sample_rate);
+void sin_freq(float freq_sin);
+int shutdown_pluto();
+void tx_freq(double freq);
+void rx_freq(double freq);
+void Multi(float freq_sin);
 
 
 /* RX is input, TX is output */
@@ -28,6 +33,8 @@ struct stream_cfg {
 	long long lo_hz; // Local oscillator frequency in Hz
 	const char* rfport; // Port name
 };
+
+	struct iio_device* tx;
 
 /* static scratch mem for strings */
 static char tmpstr[64];
@@ -152,7 +159,7 @@ void tx_freq(double freq) {
 	* TX : altvoltage1
 	* RX : altvoltage0
 	**/
-	printf("Freq is changing to: %lf", freq);
+	printf("Freq is changing to: %lf\n", freq);
 
 	dev = iio_context_find_device(ctx, "ad9361-phy");
 
@@ -168,7 +175,7 @@ void rx_freq(double freq) {
 	* TX : altvoltage1
 	* RX : altvoltage0
 	**/
-	printf("Freq is changing to: %lf", freq);
+	printf("Freq is changing to: %lf\n", freq);
 
 	dev = iio_context_find_device(ctx, "ad9361-phy");
 
@@ -178,7 +185,57 @@ void rx_freq(double freq) {
 		freq);
 }
 
+void Multi(float freq_sin) {
+
+
+	printf("* Destroying buffers\n");
+
+	if (txbuf) { iio_buffer_destroy(txbuf); }
+	
+	int buffer_size = 24800;
+	txbuf = iio_device_create_buffer(tx, buffer_size, true);
+
+	int sample_rate = 3072000;
+
+
+	
+	float sin_i[24800];
+	float cos_q[24800];
+
+	for (int i = 0; i < 24800; i++) {
+		sin_i[i] += 0.9 * sin(((float)i * M_PI * 2 * freq_sin) / (float)(sample_rate));
+		cos_q[i] += 0.9 * cos(((float)i * M_PI * 2 * freq_sin) / (float)(sample_rate));
+
+	}
+
+
+
+	char* p_dat, * p_end;
+	ptrdiff_t p_inc;
+
+	p_inc = iio_buffer_step(txbuf);
+	p_end = iio_buffer_end(txbuf);
+	int iter = 0;
+	for (p_dat = iio_buffer_first(txbuf, tx0_q); p_dat < p_end; p_dat += p_inc) {
+		((int16_t*)p_dat)[0] = cos_q[iter] * 16384;
+		((int16_t*)p_dat)[1] = sin_i[iter++] * 16384;
+
+	}
+
+	iio_buffer_push(txbuf);
+
+
+}
+
+
 void sin_freq(float freq_sin) {
+	
+	printf("* Destroying buffers\n");
+
+	if (txbuf) { iio_buffer_destroy(txbuf); }
+	
+	int buffer_size = 24800;
+	txbuf = iio_device_create_buffer(tx, buffer_size, true);
 
 	int sample_rate = 3072000;
 
@@ -189,6 +246,8 @@ void sin_freq(float freq_sin) {
 
 /* signal generator: make a sine wave */
 void sin_gen(float freq_sin, int sample_rate) {
+	
+
 
 	float sin_i[24800];
 	float cos_q[24800];
@@ -235,13 +294,13 @@ int shutdown_pluto()
 
 
 /* simple configuration and streaming */
-int pluto()
+bool pluto()
 {
 	bool check;
 
 
 	// Streaming devices
-	struct iio_device* tx;
+
 	struct iio_device* aa;
 
 	// Stream configurations
@@ -337,5 +396,5 @@ int pluto()
 	}
 	*/
 	//shutdown_pluto();
-	return 0;
+	return true;
 }
