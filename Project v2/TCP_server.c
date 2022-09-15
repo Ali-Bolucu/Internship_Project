@@ -18,6 +18,10 @@
 #define PORT 32448
 #define SA struct sockaddr
 
+void pluto_conn();
+void client_conn();
+void func();
+
 
 int sockfd, connfd, len;
 struct sockaddr_in servaddr, cli;
@@ -35,9 +39,16 @@ void client_conn(){
 	}
 	else
 		printf("server accept the client...\n \n");
+}
 
 
 
+void pluto_conn(){
+
+	printf("Going to try to start in 5 sec...\n\n");
+	sleep(5);
+
+	check = pluto();
 
 }
 
@@ -46,90 +57,170 @@ void client_conn(){
 // Function designed for chat between client and server.
 void func()
 {
-
-	int error = 0;
-	socklen_t len = sizeof(error);
-	int retval = 0;
-	
 	int n;
-
+	char str0[MAX];
 	char buff[MAX] = "not empty";
-	
-	char mes1[MAX] = "Shutting down";
-	char mes2[MAX] = "OK";
+
+	char mes0[MAX] = "NO MEANING";
+
+	char mes1[MAX] = "OK";
+	char mes2[MAX] = "!!NOT OK";
+
 	char mes3[MAX] = "Frequency changed";
-	char mes4[MAX] = "NO MEANING";
-	char mes5[MAX] = "NOT OK";
-	char mes6[MAX] = "Freq Added";
+	char mes4[MAX] = "!!Frequency NOT changed";
+
+	char mes5[MAX] = "Sin wave's frequency Changed";
+	char mes6[MAX] = "!!Sin wave's frequency NOT Changed";
+
+	char mes7[MAX] = "New sin wave added";
+	char mes8[MAX] = "!!New sin wave NOT added";
+
+	char mes9[MAX]  = "Returning single tone";
+	char mes10[MAX] = "!!Couldn't return single tone";
+
+	char mes11[MAX]  = "Shutting down Pluto and server";
+	cha mes12[MAX] = "!!Couldn't Shutting down Pluto but closing server";
+
 	
 	while(true){
+
+		//buff bos degilse if"in icine giriyor
+		if ((strcmp(buff, ""))) {
+			
+				bzero(buff, MAX);
+				read(connfd, buff, sizeof(buff));
+				printf("[client] %s \n", buff);
+			
+
+			
+			if (strncmp("CHECK", buff, 5) == 0) {
+				printf("Checking...\n");
+				
+				if (check){
+				write(connfd, mes1, 512);
+				printf("Pluto working...\n");
+				}
+				else{
+				printf("!!Pluto NOT working...\n");
+				pluto_conn();
+				write(connfd, mes2, 512);
+				}
+			}
+			
+			else if (strncmp("F:", buff, 2) == 0) {
+
+				float freq;
+				
+				bool tx;
+				sscanf(buff, "%*[^0123456789]%lf", &freq);
+				tx = tx_freq(freq);
+
+				if(tx){
+				long long freq_c; = freq_check();
+				spintf(str0, "%f", freq_c);
+				strcat(mes3, str0);
+				write(connfd, mes3, 512);
+				printf("Frequency Changed to %f\n", freq);
+				}
+				else{
+				write(connfd, mes4, 512);
+				printf("!!Frequency NOT Changed...\n");
+				}	
+			}
+				
+				
+			else if (strncmp("sinF:", buff, 5) == 0) {
+
+				float freq;
+				bool sinf;
+				sscanf(buff, "%*[^0123456789]%f", &freq);
+
+				sinf = sin_gen(freq);
+
+				if(sinf){
+				write(connfd, mes5, 512);
+				printf("Sin wave's frequency Changed...\n");
+				}
+				else{
+				write(connfd, mes6, 512);
+				printf("!!Sin wave's frequency NOT Changed...\n");
+				}
+			}
+
+			else if (strncmp("multi:", buff, 6) == 0) {
+
+				float freq;
+				float num;
+				bool multi;
+
+				sscanf(buff, "%*[^0123456789]%f%*[^0123456789.]%f", &freq, &num);
+
+				multi = Multi(freq, num);
+
+				if(multi){
+				write(connfd, mes7, 512);
+				printf("New sin wave added...\n");
+				}
+				else{
+				write(connfd, mes8, 512);
+				printf("!!New sin wave NOT added...\n");
+				}
+
+
+
+			}
+
+			else if (strncmp("clear", buff, 5) == 0) {
+
+				bool clc = clear();
+
+				if(clc){
+				write(connfd, mes9, 512);
+				printf("Returning single tone...\n");
+				}
+				else{
+				write(connfd, mes10, 512);
+				printf("!!Couldnt return single tone...\n");
+				}
 	
-	//retval = getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &error, &len);
-	
-	if ((strcmp(buff, ""))) {
-		
-			bzero(buff, MAX);
-			read(connfd, buff, sizeof(buff));
-			printf("[client] %s \n", buff);
-		
-		if (strncmp("exit", buff, 4) == 0) {
-			printf("Server Exit...\n");
-			write(connfd, mes1, 512);
-			shutdown_pluto();
-			break;
-			}
-		
-		else if (strncmp("CHECK", buff, 4) == 0) {
-			printf("Checking...\n");
-			
-			if (check)
-			write(connfd, mes2, 512);
-			
-			else
-			write(connfd, mes5, 512);
-			
-			}
-		
-		else if (strncmp("F:", buff, 2) == 0) {
+				
 
-			double freq;
-			sscanf(buff, "%*[^0123456789]%lf", &freq);
-			write(connfd, mes3, 512);		
-			tx_freq(freq);
 			}
-			
-		else if (strncmp("sinF:", buff, 4) == 0) {
+				
+			else if (strncmp("close", buff, 5) == 0) {
 
-			float freq;
-			sscanf(buff, "%*[^0123456789]%f", &freq);
-			write(connfd, mes3, 512);		
-			sin_freq(freq);
+				printf("Connectin closed, waiting new ...");
+				client_conn();
 			}
-		else if (strncmp("Multi:", buff, 4) == 0) {
 
-			float freq;
-			sscanf(buff, "%*[^0123456789]%f", &freq);
-			write(connfd, mes6, 512);		
-			Multi(freq);
-			}
-			
-		else if (strncmp("close", buff, 5) == 0) {
+			else if (strncmp("exit", buff, 4) == 0) {
 
-			client_conn();
+				bool exitt = shutdown_pluto();
+
+				if(exitt){
+				write(connfd, mes11, 512);
+				printf("Shutting down Pluto and server...\n");
+				}
+				else{
+				write(connfd, mes12, 512);
+				printf("!!Couldn't Shutting down Pluto but closing server...\n");
+				}
+				break;
 			}
-			
+
+			else{
+				write(connfd, mes0, 512);
+				}
+				
+
+		}
 		else{
-			write(connfd, mes4, 512);
-			}
-			
-
-	}else{
-	printf("Connection lost...\n \t Waiting new connection \n\n");
-	n = 0;
-	client_conn();
-	strcpy(buff, mes3);
+		printf("Connection lost...\n \t Waiting new connection \n\n");
+		n = 0;
+		client_conn();
+		strcpy(buff, mes3);
+		}
 	}
-}
 }
 
 			
@@ -173,6 +264,7 @@ int main()
 	len = sizeof(cli);
 
 	
+	sleep(10);
 	// Starting Pluto
 	check = pluto();
 	

@@ -15,12 +15,12 @@
 
 #pragma warning (disable : 4996)
 
-void sin_gen(float freq_sin, int sample_rate);
-void sin_freq(float freq_sin);
-int shutdown_pluto();
-void tx_freq(double freq);
-void rx_freq(double freq);
-void Multi(float freq_sin);
+bool sin_gen(float freq_sin);
+bool shutdown_pluto();
+bool tx_freq(float freq);
+void rx_freq(float freq);
+bool Multi(float freq_sin, float num);
+bool clear();
 
 
 /* RX is input, TX is output */
@@ -34,7 +34,17 @@ struct stream_cfg {
 	const char* rfport; // Port name
 };
 
-	struct iio_device* tx;
+
+// Stajer degisiklikleri
+struct iio_device* tx;
+
+int buffer_size = 24800;
+int sample_rate = 3072000;
+
+float freq_save_for_clear;
+
+float sin_i[24800];
+float cos_q[24800];
 
 /* static scratch mem for strings */
 static char tmpstr[64];
@@ -153,24 +163,47 @@ bool cfg_ad9361_streaming_ch(struct iio_context* ctx, struct stream_cfg* cfg, en
 
 ////Functions for frequency change
 
-// For TX
-void tx_freq(double freq) {
-	/**
-	* TX : altvoltage1
-	* RX : altvoltage0
-	**/
-	printf("Freq is changing to: %lf\n", freq);
 
-	dev = iio_context_find_device(ctx, "ad9361-phy");
+
+long long freq_check(){
+
+	long long freq;
+
 
 	iio_channel_attr_write_longlong(
 		iio_device_find_channel(dev, "altvoltage1", true),
 		"frequency",
 		freq);
+
+
+	return freq;
 }
 
-// For RX
-void rx_freq(double freq) {
+
+// For TX
+bool tx_freq(float freq) {
+	/**
+	* TX : altvoltage1
+	* RX : altvoltage0
+	**/
+	printf("Freq is changing to: %lf\n", freq);
+	
+	if (!ctx){return false;}
+
+	dev = iio_context_find_device(ctx, "ad9361-phy");
+	
+	if (!dev){return false;}
+
+	iio_channel_attr_write_longlong(
+		iio_device_find_channel(dev, "altvoltage1", true),
+		"frequency",
+		freq);
+		
+	return true;
+}
+
+// For RX, not using
+void rx_freq(float freq) {
 	/**
 	* TX : altvoltage1
 	* RX : altvoltage0
@@ -185,26 +218,34 @@ void rx_freq(double freq) {
 		freq);
 }
 
-void Multi(float freq_sin) {
+bool clear() {
+	
+	printf("* Destroying buffers\n");
+	if (txbuf) { iio_buffer_destroy(txbuf); }
+	
+	txbuf = iio_device_create_buffer(tx, buffer_size, true);
+
+	if (!txbuf) { return false; }
+
+
+	sin_gen(freq_save_for_clear);
+
+	return true;
+}
+
+bool Multi(float freq_sin, float num) {
 
 
 	printf("* Destroying buffers\n");
 
 	if (txbuf) { iio_buffer_destroy(txbuf); }
-	
-	int buffer_size = 24800;
+
 	txbuf = iio_device_create_buffer(tx, buffer_size, true);
-
-	int sample_rate = 3072000;
-
-
-	
-	float sin_i[24800];
-	float cos_q[24800];
+	if (!txbuf) { return false; }
 
 	for (int i = 0; i < 24800; i++) {
-		sin_i[i] += 0.9 * sin(((float)i * M_PI * 2 * freq_sin) / (float)(sample_rate));
-		cos_q[i] += 0.9 * cos(((float)i * M_PI * 2 * freq_sin) / (float)(sample_rate));
+		sin_i[i] += sin(((float)i * M_PI * 2 * freq_sin) / (float)(sample_rate)) *num ;
+		cos_q[i] += cos(((float)i * M_PI * 2 * freq_sin) / (float)(sample_rate)) *num;
 
 	}
 
@@ -224,37 +265,26 @@ void Multi(float freq_sin) {
 
 	iio_buffer_push(txbuf);
 
-
+ return true;
 }
 
-
-void sin_freq(float freq_sin) {
-	
-	printf("* Destroying buffers\n");
-
-	if (txbuf) { iio_buffer_destroy(txbuf); }
-	
-	int buffer_size = 24800;
-	txbuf = iio_device_create_buffer(tx, buffer_size, true);
-
-	int sample_rate = 3072000;
-
-	sin_gen(freq_sin, sample_rate);
-}
 
 
 
 /* signal generator: make a sine wave */
-void sin_gen(float freq_sin, int sample_rate) {
+bool sin_gen(float freq_sin) {
 	
-
-
-	float sin_i[24800];
-	float cos_q[24800];
-
+	freq_save_for_clear = freq_sin;
+	
+	printf("* Destroying buffers\n");
+	if (txbuf) { iio_buffer_destroy(txbuf); }
+	
+	txbuf = iio_device_create_buffer(tx, buffer_size, true);
+	
+	
 	for (int i = 0; i < 24800; i++) {
-		sin_i[i] = 0.9 * sin(((float)i * M_PI * 2 * freq_sin) / (float)(sample_rate));
-		cos_q[i] = 0.9 * cos(((float)i * M_PI * 2 * freq_sin) / (float)(sample_rate));
+		sin_i[i] = sin(((float)i * M_PI * 2 * freq_sin) / (float)(sample_rate));
+		cos_q[i] = cos(((float)i * M_PI * 2 * freq_sin) / (float)(sample_rate));
 
 	}
 
@@ -272,10 +302,11 @@ void sin_gen(float freq_sin, int sample_rate) {
 	}
 
 	iio_buffer_push(txbuf);
+	return true;
 }
 
 /* cleanup and exit */
-int shutdown_pluto()
+bool shutdown_pluto()
 {
 	printf("* Destroying buffers\n");
 	if (rxbuf) { iio_buffer_destroy(rxbuf); }
@@ -289,13 +320,21 @@ int shutdown_pluto()
 
 	printf("* Destroying context\n");
 	if (ctx) { iio_context_destroy(ctx); }
-	return 0;
+	return true;
 }
 
 
 /* simple configuration and streaming */
 bool pluto()
 {
+	
+	if (rx0_i) { iio_channel_disable(rx0_i); }
+	if (rx0_q) { iio_channel_disable(rx0_q); }
+	if (tx0_i) { iio_channel_disable(tx0_i); }
+	if (tx0_q) { iio_channel_disable(tx0_q); }
+	
+	
+	
 	bool check;
 
 
@@ -360,8 +399,6 @@ bool pluto()
 	iio_channel_enable(tx0_i);
 	iio_channel_enable(tx0_q);
 
-	int buffer_size = 24800;
-
 	printf("* Creating non-cyclic IIO buffers with 1 MiS\n \n");
 	txbuf = iio_device_create_buffer(tx, buffer_size, true);
 	if (!txbuf) {
@@ -371,30 +408,12 @@ bool pluto()
 	}
 
 
-	int sample_rate = 3072000;
 	float freq_sin = 10000;
 
 
 	//sin wave created
-	sin_gen(freq_sin, sample_rate);
+	sin_gen(freq_sin);
 
-
-	/*
-	printf("* Starting IO streaming (press CTRL+C to cancel)\n");
-	while (!stop)
-	{
-		char* p_dat, * p_end;
-		ptrdiff_t p_inc;
-		// Refill RX buffer: fetch from hardware
-		iio_buffer_refill(rxbuf);
-		p_inc = iio_buffer_step(rxbuf);
-		p_end = iio_buffer_end(rxbuf);
-		int iter = 0;
-		for (p_dat = iio_buffer_first(rxbuf, rx0_q); p_dat < p_end; p_dat += p_inc) {
-	
-		}
-	}
-	*/
 	//shutdown_pluto();
 	return true;
 }
